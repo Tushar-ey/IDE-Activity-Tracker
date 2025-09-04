@@ -34,7 +34,6 @@ public class FileChangeMonitor implements Runnable {
     public void run() {
         try (WatchService watchService = FileSystems.getDefault().newWatchService()) {
             registerAllDirs(projectRoot, watchService);
-
             while (true) {
                 WatchKey key = watchService.take();
                 Path dir = (Path) key.watchable();
@@ -50,7 +49,6 @@ public class FileChangeMonitor implements Runnable {
             e.printStackTrace();
         }
     }
-
     private void processFileChange(Path file) throws IOException {
 
         String fileName = file.getFileName().toString();
@@ -69,7 +67,6 @@ public class FileChangeMonitor implements Runnable {
         }
 
         Patch<String> patch = DiffUtils.diff(oldContent, newContent);
-
         int linesChanged = 0;
         List<String> codeSnippets = new ArrayList<>();
         for (AbstractDelta<String> delta : patch.getDeltas()) {

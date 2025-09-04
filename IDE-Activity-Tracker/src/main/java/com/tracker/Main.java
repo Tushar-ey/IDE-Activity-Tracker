@@ -43,7 +43,7 @@ public class Main {
             System.out.println("Monitoring IDE focus (VS Code / IntelliJ)...");
 
             boolean wasIDERunning=false;
-            AtomicReference<String> lastKnownIDEName = new AtomicReference<>("Unknown");
+            AtomicReference<String> lastKnownIDEName = new AtomicReference<>("Unknown IDE");
             AtomicReference<String> lastKnownIDEVersion = new AtomicReference<>("Unknown");
             AtomicReference<Boolean> copilotUsedDuringSession = new AtomicReference<>(false);
             ActivitySessionTracker sessionTracker = new ActivitySessionTracker();
@@ -59,11 +59,11 @@ public class Main {
                 if(ideRunning) {
                     sessionTracker.updateSession(ideActive);
                     wasIDERunning = true;
-                    if (!ideName.equals("Unknown")) {
+                    if (!ideName.equals("Unknown IDE") && !ideName.isBlank()) {
                         lastKnownIDEName.set(ideName);
                     }
 
-                    if (!version.equals("Unknown")) {
+                    if (!version.equals("Unknown") && !version.isBlank()) {
                         lastKnownIDEVersion.set(version);
                     }
 
@@ -90,10 +90,10 @@ public class Main {
                         json.putPOJO("code_snippets", codeSnippets);
 
                         ActivityLogger.log(json);
-
                         // Reset session state
                         wasIDERunning = false;
                         lastKnownIDEName.set("Unknown");
+                        lastKnownIDEVersion.set("Unknown");
                         copilotUsedDuringSession.set(false);
                         linesChanged.set(0);
                         codeSnippets.clear();

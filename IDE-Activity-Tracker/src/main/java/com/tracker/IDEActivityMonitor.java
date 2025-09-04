@@ -173,17 +173,17 @@ public class IDEActivityMonitor {
                 System.err.println("Failed to read IntelliJ IDEA version: " + e.getMessage());
             }
         } else if ("VS Code".equals(ideName)) {
-            String codePath = System.getenv("ProgramFiles") + "\\Microsoft VS Code\\resources\\app\\package.json";
-            try (BufferedReader reader = new BufferedReader(new FileReader(codePath))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (line.contains("\"version\"")) {
-                        return line.split(":")[1].replace("\"", "").replace(",", "").trim();
-                    }
-                }
+            try {
+                String vswherePath = "\"C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe\"";
+                Process process = Runtime.getRuntime().exec("cmd /c " + vswherePath + " -latest -property catalog_productDisplayVersion");
+                BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                String version = reader.readLine();
+                return version != null ? version.trim() : "Unknown";
             } catch (Exception e) {
-                System.err.println("Failed to read VS Code version: " + e.getMessage());
+                e.printStackTrace();
+                return "Unknown";
             }
+
         }
         return "";
     }
