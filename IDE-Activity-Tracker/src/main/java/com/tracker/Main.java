@@ -16,7 +16,9 @@ public class Main {
             JsonNode config = ConfigManager.getConfig();
 
             System.out.println(" Config loaded:");
-            System.out.println("User ID: " + config.get("userId").asText());
+            String userId= config.get("userId").asText();
+            System.out.println("User ID: " +userId );
+             String email= config.get("email").asText();
             System.out.println("Email: " + config.get("email").asText());
             System.out.println("Project Root: " + config.get("projectRootPath").asText());
 
@@ -37,45 +39,85 @@ public class Main {
             String projectRoot = config.get("projectRootPath").asText();
             FileChangeMonitor monitor = new FileChangeMonitor(projectRoot, listener);
             new Thread(monitor).start();
-
             // Next: Start monitoring modules here
             System.out.println("Monitoring IDE focus (VS Code / IntelliJ)...");
 
+            boolean wasIDERunning=false;
+            AtomicReference<String> lastKnownIDEName = new AtomicReference<>("Unknown");
+            AtomicReference<String> lastKnownIDEVersion = new AtomicReference<>("Unknown");
+            AtomicReference<Boolean> copilotUsedDuringSession = new AtomicReference<>(false);
             ActivitySessionTracker sessionTracker = new ActivitySessionTracker();
-            //boolean wasIDERunning=false;
             while (true) {
-                //boolean ideRunning = IDEActivityMonitor.isIDERunning();
+                boolean ideRunning = IDEActivityMonitor.isIDERunning();
+                System.out.println(ideRunning);
                 boolean ideActive = IDEActivityMonitor.isIDEActive();
-                sessionTracker.updateSession(ideActive);
-
                 String ideName = IDEActivityMonitor.getIDEName();
-                String activeWindowTitle = IDEActivityMonitor.getActiveWindowTitle();
+                String version= IDEActivityMonitor.getIDEVersion();
+//                String activeWindowTitle = IDEActivityMonitor.getActiveWindowTitle();
                 boolean copilotEnabled = CopilotChecker.isCopilotEnabled();
 
-                ObjectMapper mapper = new ObjectMapper();
-                ObjectNode json = mapper.createObjectNode();
-                json.put("ide_active", ideActive);
-                json.put("ide", ideName);
-                json.put("window_title", activeWindowTitle);
-                json.put("copilot_enabled", copilotEnabled);
-                json.put("start_time", sessionTracker.getSessionStartTime());
-                json.put("active_minutes", sessionTracker.getActiveDuration());
-                json.put("changed_file", changedFileName.get());
-                json.put("lines_changed", linesChanged.get());
-                json.putPOJO("code_snippets", codeSnippets);
+                if(ideRunning) {
+                    sessionTracker.updateSession(ideActive);
+                    wasIDERunning = true;
+                    if (!ideName.equals("Unknown")) {
+                        lastKnownIDEName.set(ideName);
+                    }
 
-//                    ActivityLogger.log(json);
-//
-//                    // Reset session state
-//                    wasIDERunning = false;
-//                    linesChanged.set(0);
-//                    codeSnippets.clear();
-//                    changedFileName.set("");
-//                    sessionTracker.resetSession();
-                System.out.println(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(json));
+                    if (!version.equals("Unknown")) {
+                        lastKnownIDEVersion.set(version);
+                    }
 
+                    if (copilotEnabled) {
+                        copilotUsedDuringSession.set(true);
+                    }
+                }
+                else {
+                    System.out.println("IdeRunning: "+ ideRunning);
+                    if (wasIDERunning) {
+                        System.out.println(wasIDERunning +"value");
+                        // IDE just exited, log the session
+                        ObjectMapper mapper = new ObjectMapper();
+                        ObjectNode json = mapper.createObjectNode();
+                        json.put("userId", userId);
+                        json.put("email", email);
+                        json.put("ide", lastKnownIDEName.get());
+                        json.put("version", lastKnownIDEVersion.get());
+                        json.put("copilot_enabled", copilotUsedDuringSession.get());
+                        json.put("start_time", sessionTracker.getSessionStartTime());
+                        json.put("active_minutes", sessionTracker.getActiveDuration());
+                        json.put("changed_file", changedFileName.get());
+                        json.put("lines_changed", linesChanged.get());
+                        json.putPOJO("code_snippets", codeSnippets);
+
+                        ActivityLogger.log(json);
+
+                        // Reset session state
+                        wasIDERunning = false;
+                        lastKnownIDEName.set("Unknown");
+                        copilotUsedDuringSession.set(false);
+                        linesChanged.set(0);
+                        codeSnippets.clear();
+                        changedFileName.set("");
+                        sessionTracker.resetSession();
+                    }
+                }
+//                ObjectMapper mapper = new ObjectMapper();
+//                ObjectNode json = mapper.createObjectNode();
+//                json.put("userId", userId);
+//                json.put("email", email);
+//                json.put("ide_active", ideActive);
+//                json.put("ide", lastKnownIDEName.get());
+//                json.put("window_title", activeWindowTitle);
+//                json.put("copilot_enabled", copilotEnabled);
+//                json.put("start_time", sessionTracker.getSessionStartTime());
+//                json.put("active_minutes", sessionTracker.getActiveDuration());
+//                json.put("changed_file", changedFileName.get());
+//                json.put("lines_changed", linesChanged.get());
+//                json.putPOJO("code_snippets", codeSnippets);
+////
+//                System.out.println(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(json));
                 // Sleep for 5 seconds before next check
-                Thread.sleep(5000);
+                Thread.sleep(10000);
             }
         }
         catch (Exception e) {
