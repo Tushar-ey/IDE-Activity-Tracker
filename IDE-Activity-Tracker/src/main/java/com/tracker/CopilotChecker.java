@@ -9,12 +9,18 @@ public class CopilotChecker {
     public static boolean isCopilotEnabledVSCode() {
         String userHome = System.getProperty("user.home");
         Path extensionsPath = Paths.get(userHome, ".vscode", "extensions");
+        Path disabledPath = Paths.get(userHome, ".vscode", "extensions", "disabled");
 
         if (!Files.exists(extensionsPath)) return false;
 
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(extensionsPath)) {
             for (Path entry : stream) {
-                if (entry.getFileName().toString().toLowerCase().startsWith("github.copilot")) {
+                String name = entry.getFileName().toString().toLowerCase();
+                if (name.startsWith("github.copilot")) {
+                    // Check if extension is in disabled folder
+                    if (Files.exists(disabledPath.resolve(entry.getFileName()))) {
+                        return false;
+                    }
                     return true;
                 }
             }
@@ -27,21 +33,25 @@ public class CopilotChecker {
 
     public static boolean isCopilotEnabledIntelliJ() {
         String userHome = System.getProperty("user.home");
-        String[] possiblePaths = {
-                userHome + "/AppData/Roaming/JetBrains", // Windows
-                userHome + "/Library/Application Support/JetBrains" // macOS
-        };
-
-        for (String basePath : possiblePaths) {
-            File jetbrainsDir = new File(basePath);
-            if (jetbrainsDir.exists()) {
-                File[] ideaVersions = jetbrainsDir.listFiles();
-                if (ideaVersions != null) {
-                    for (File versionDir : ideaVersions) {
-                        File pluginDir = new File(versionDir, "plugins/github-copilot");
-                        if (pluginDir.exists()) {
-                            return true;
+        File jetbrainsDir = new File(userHome, "AppData/Roaming/JetBrains");
+        if (jetbrainsDir.exists()) {
+            File[] ideaVersions = jetbrainsDir.listFiles((dir, name) -> name.startsWith("Idea"));
+            if (ideaVersions != null) {
+                for (File versionDir : ideaVersions) {
+                    File pluginDir = new File(versionDir, "plugins/github-copilot-intellij");
+                    if (pluginDir.exists()) {
+                        File disabledPluginsFile = new File(versionDir, "disabled_plugins.txt");
+                        if (disabledPluginsFile.exists()) {
+                            try {
+                                String content = new String(java.nio.file.Files.readAllBytes(disabledPluginsFile.toPath()));
+                                if (content.contains("com.github.copilot")) {
+                                    return false;
+                                }
+                            } catch (Exception e) {
+                                System.err.println("Error reading disabled_plugins.txt: " + e.getMessage());
+                            }
                         }
+                        return true;
                     }
                 }
             }
@@ -50,6 +60,12 @@ public class CopilotChecker {
     }
 
     public static boolean isCopilotEnabled() {
-        return isCopilotEnabledVSCode() || isCopilotEnabledIntelliJ();
+        String ideName = IDEActivityMonitor.getIDEName();
+        if ("IntelliJ IDEA".equalsIgnoreCase(ideName)) {
+            return isCopilotEnabledIntelliJ();
+        } else if ("VS Code".equalsIgnoreCase(ideName)) {
+            return isCopilotEnabledVSCode();
+        }
+        return false;
     }
 }

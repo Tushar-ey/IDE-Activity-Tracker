@@ -6,6 +6,8 @@ import com.sun.jna.ptr.IntByReference;
 
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.io.InputStreamReader;
 
 import static com.tracker.CopilotChecker.isCopilotEnabledVSCode;
@@ -49,14 +51,11 @@ public class IDEActivityMonitor {
         if (process == null) {
             return false;
         }
-
         // Get module handle
         char[] exeName = new char[1024];
         Psapi.INSTANCE.GetModuleBaseNameW(process, null, exeName, exeName.length);
         String processName = Native.toString(exeName).toLowerCase();
-
         Kernel32.INSTANCE.CloseHandle(process);
-
         return processName.contains("idea") || processName.contains("code");
 
     }
@@ -80,22 +79,19 @@ public class IDEActivityMonitor {
         if (process == null) {
             return "Unknown";
         }
-
         char[] exeName = new char[1024];
         Psapi.INSTANCE.GetModuleBaseNameW(process, null, exeName, exeName.length);
         String processName = Native.toString(exeName).toLowerCase();
 
         Kernel32.INSTANCE.CloseHandle(process);
-
         if (processName.contains("code")) {
             return "VS Code";
         } else if (processName.contains("idea")) {
             return "IntelliJ IDEA";
         } else {
-            return "Unknown";
+            return "Unknown IDE";
         }
     }
-
     private static boolean isIDEActiveMac() {
         try {
             Process process = Runtime.getRuntime().exec(
@@ -109,7 +105,6 @@ public class IDEActivityMonitor {
             return false;
         }
     }
-
     private static String getIDENameMac() {
         try {
             Process process = Runtime.getRuntime().exec(
@@ -130,15 +125,14 @@ public class IDEActivityMonitor {
             return "Unknown";
         }
     }
-
     public static boolean isIDERunning() {
-        String ideProcessName = getIDEProcessName(); // e.g., "code", "idea"
         try {
             Process process = Runtime.getRuntime().exec("tasklist");
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             String line;
             while ((line = reader.readLine()) != null) {
-                if (line.toLowerCase().contains(ideProcessName)) {
+                line = line.trim().toLowerCase();
+                if (line.startsWith("idea64.exe") || line.startsWith("code.exe")) {
                     return true;
                 }
             }
@@ -148,14 +142,56 @@ public class IDEActivityMonitor {
         return false;
     }
 
+    public static String getIntelliJProductInfoPath() {
+        String jetBrainsPath = System.getenv("ProgramFiles") + "\\JetBrains";
+        File jetBrainsDir = new File(jetBrainsPath);
+        if (jetBrainsDir.exists() && jetBrainsDir.isDirectory()) {
+            File[] dirs = jetBrainsDir.listFiles(File::isDirectory);
+            if (dirs != null) {
+                for (File dir : dirs) {
+                    if (dir.getName().startsWith("IntelliJ IDEA")) {
+                        return dir.getAbsolutePath() + "\\product-info.json";
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    public static String getIDEVersion() {
+        String ideName = getIDEName();
+        if ("IntelliJ IDEA".equals(ideName)) {
+            String ideaPath = getIntelliJProductInfoPath();
+            try (BufferedReader reader = new BufferedReader(new FileReader(ideaPath))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.contains("\"version\"")) {
+                        return line.split(":")[1].replace("\"", "").replace(",", "").trim();
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Failed to read IntelliJ IDEA version: " + e.getMessage());
+            }
+        } else if ("VS Code".equals(ideName)) {
+            try {
+                String vswherePath = "\"C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe\"";
+                Process process = Runtime.getRuntime().exec("cmd /c " + vswherePath + " -latest -property catalog_productDisplayVersion");
+                BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                String version = reader.readLine();
+                return version != null ? version.trim() : "Unknown";
+            } catch (Exception e) {
+                e.printStackTrace();
+                return "Unknown";
+            }
+
+        }
+        return "";
+    }
+
     private static String getIDEProcessName() {
         String ide = getIDEName().toLowerCase();
         if (ide.contains("code")) return "code.exe";
         if (ide.contains("idea")) return "idea64.exe";
         return "";
     }
-    public static boolean isCopilotEnabled () {
-            return CopilotChecker.isCopilotEnabled();
-        }
-
 }

@@ -2,6 +2,7 @@ package com.tracker;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;
@@ -23,18 +24,28 @@ public class ActivityLogger {
 
             // Create file name with current date
             String date = LocalDate.now().toString();
-            String fileName = "activity_log_" + date + ".txt";
+            String fileName = "activity_log_" + date + ".json";
             Path logFilePath = logDirPath.resolve(fileName);
 
             // Convert JSON to string
             ObjectMapper mapper = new ObjectMapper();
-            String jsonString = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(jsonNode);
+//            String jsonString = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(jsonNode);
+              ArrayNode logArray;
+
+              if(Files.exists(logFilePath)){
+                  logArray= (ArrayNode) mapper.readTree(logFilePath.toFile());
+              }
+              else{
+                  logArray=mapper.createArrayNode();
+              }
+              logArray.add(jsonNode);
+              mapper.writerWithDefaultPrettyPrinter().writeValue(logFilePath.toFile(), logArray);
 
             // Write to file in append mode
-            try (BufferedWriter writer = new BufferedWriter(new FileWriter(logFilePath.toFile(), true))) {
-                writer.write(jsonString);
-                writer.newLine();
-            }
+//            try (BufferedWriter writer = new BufferedWriter(new FileWriter(logFilePath.toFile(), true))) {
+//                writer.write(jsonString);
+//                writer.newLine();
+//            }
 
             System.out.println("Session logged to file: " + logFilePath);
         } catch (IOException e) {
