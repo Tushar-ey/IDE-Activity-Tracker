@@ -4,17 +4,29 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class Main {
+
+    /**
+     * Entry point for the Tracker application.
+     * <p>
+     * Loads configuration, starts file change monitoring, and continuously
+     * tracks IDE activity and file changes. Logs session data when the IDE exits.
+     * </p>
+     *
+     * @param args Command-line arguments (not used)
+     */
     public static void main(String[] args) {
+
         try {
             ConfigManager.initializeConfig();
             JsonNode config = ConfigManager.getConfig();
-
             System.out.println(" Config loaded:");
             String userId= config.get("userId").asText();
             System.out.println("User ID: " +userId );
@@ -23,18 +35,23 @@ public class Main {
             System.out.println("Project Root: " + config.get("projectRootPath").asText());
 
             // Shared variables for file change info
-            AtomicReference<String> changedFileName = new AtomicReference<>("");
-            AtomicInteger linesChanged = new AtomicInteger(0);
-            CopyOnWriteArrayList<String> codeSnippets = new CopyOnWriteArrayList<>();
+//            CopyOnWriteArrayList<FileChangeLog> fileChangeLogs = new CopyOnWriteArrayList<>();
+            ConcurrentHashMap<String, FileChangeLog> fileChangeMap = new ConcurrentHashMap<>();
 
-            FileChangeListener listener = new FileChangeListener() {
-                @Override
-                public void onFileChanged(String fileName, int changed, List<String> snippets) {
-                    changedFileName.set(fileName);
-                    linesChanged.set(changed);
-                    codeSnippets.clear();
-                    codeSnippets.addAll(snippets);
-                }
+
+            FileChangeListener listener = (repositoryName, filePath, changed, snippets,deletedSnippets) -> {
+              //  fileChangeLogs.add(new FileChangeLog(filePath, changed, snippets));
+                fileChangeMap.compute(filePath, (path, existingLog) -> {
+                    if (existingLog == null) {
+                        return new FileChangeLog(filePath, changed, new ArrayList<>(snippets),new ArrayList<>(deletedSnippets));
+                    } else {
+                        existingLog.linesChanged += changed;
+                        existingLog.codeSnippets.addAll(snippets);
+                        existingLog.deletedSnippets.addAll(deletedSnippets);
+                        return existingLog;
+                    }
+                });
+
             };
             String projectRoot = config.get("projectRootPath").asText();
             FileChangeMonitor monitor = new FileChangeMonitor(projectRoot, listener);
@@ -85,9 +102,7 @@ public class Main {
                         json.put("copilot_enabled", copilotUsedDuringSession.get());
                         json.put("start_time", sessionTracker.getSessionStartTime());
                         json.put("active_minutes", sessionTracker.getActiveDuration());
-                        json.put("changed_file", changedFileName.get());
-                        json.put("lines_changed", linesChanged.get());
-                        json.putPOJO("code_snippets", codeSnippets);
+                        json.putPOJO("file_changes", new ArrayList<>(fileChangeMap.values()));
 
                         ActivityLogger.log(json);
                         // Reset session state
@@ -95,27 +110,26 @@ public class Main {
                         lastKnownIDEName.set("Unknown");
                         lastKnownIDEVersion.set("Unknown");
                         copilotUsedDuringSession.set(false);
-                        linesChanged.set(0);
-                        codeSnippets.clear();
-                        changedFileName.set("");
+//                        linesChanged.set(0);
+//                        codeSnippets.clear();
+//                        changedFileName.set("");
                         sessionTracker.resetSession();
                     }
                 }
-//                ObjectMapper mapper = new ObjectMapper();
-//                ObjectNode json = mapper.createObjectNode();
-//                json.put("userId", userId);
-//                json.put("email", email);
-//                json.put("ide_active", ideActive);
-//                json.put("ide", lastKnownIDEName.get());
-//                json.put("window_title", activeWindowTitle);
-//                json.put("copilot_enabled", copilotEnabled);
-//                json.put("start_time", sessionTracker.getSessionStartTime());
-//                json.put("active_minutes", sessionTracker.getActiveDuration());
-//                json.put("changed_file", changedFileName.get());
-//                json.put("lines_changed", linesChanged.get());
-//                json.putPOJO("code_snippets", codeSnippets);
-////
-//                System.out.println(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(json));
+                ObjectMapper mapper = new ObjectMapper();
+                ObjectNode json = mapper.createObjectNode();
+                json.put("userId", userId);
+                json.put("email", email);
+                json.put("ide", lastKnownIDEName.get());
+                json.put("version", lastKnownIDEVersion.get());
+                json.put("copilot_enabled", copilotUsedDuringSession.get());
+                json.put("start_time", sessionTracker.getSessionStartTime());
+                json.put("active_minutes", sessionTracker.getActiveDuration());
+                json.putPOJO("file_changes", new ArrayList<>(fileChangeMap.values()));
+
+
+//
+                System.out.println(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(json));
                 // Sleep for 5 seconds before next check
                 Thread.sleep(10000);
             }
